@@ -4,6 +4,13 @@ import { createTodo, getFromServer } from "./server";
 
 export function useTodos() {
   const [todos, setTodos] = useState<{ content: string; id: string }[]>([]);
+  const [isLoading, setIsLoading] = useState(false)
+  const [isError, setIsError] = useState(false)
+  const [isSync, setIsSync] = useState(true)
+
+  useEffect(() => {
+    handleStartup();
+  }, []);
 
   async function handleTask(content: string) {
     const newTodo = {
@@ -16,14 +23,20 @@ export function useTodos() {
     saveLocal("todos", newTodos);
 
     try {
+      setIsLoading(true)
       await createTodo(newTodo);
     } catch (e) {
+      setIsSync(false)
+      setIsError(true)
       const tasks = getLocal("queue");
       if (tasks) {
         return saveLocal("queue", [...tasks, newTodo]);
       }
       return saveLocal("queue", [newTodo]);
+    } finally {
+      setIsLoading(false)
     }
+    console.log(isSync)
   }
 
   async function handleStartup() {
@@ -36,22 +49,30 @@ export function useTodos() {
       const todos = await getFromServer();
       saveLocal("todos", todos);
       setTodos(todos);
+      setIsSync(true)
     }
 
     if (tasks) {
+      setIsSync(false)
       try {
+        setIsLoading(true)
         const synchronized = await syncTasks(tasks)
         if (synchronized) {
           try {
             const todos = await getFromServer();
             saveLocal("todos", todos);
             setTodos(todos);
+            setIsSync(true)
           } catch (e) {
+            setIsError(true)
             console.log(e);
           }
         }
       } catch (e) {
+        setIsError(true)
         console.log(e)
+      } finally {
+        setIsLoading(false)
       }
     }
   }
@@ -79,12 +100,13 @@ export function useTodos() {
 
   }
 
-  useEffect(() => {
-    handleStartup();
-  }, []);
+
 
   return {
     todos,
     handleTask,
+    isLoading,
+    isError,
+    isSync
   };
 }
